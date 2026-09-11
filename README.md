@@ -76,7 +76,13 @@ fine - nothing does `.read()` or `.readlines()` on the whole input.
 ## Status
 
 Early skeleton. Parsing and both conversion directions work and are
-covered by the mapping above; no tests yet, no packaging on PyPI.
+covered by unit tests in `tests/`; no packaging on PyPI yet.
+
+Run the tests with:
+
+```
+python -m unittest discover -s tests
+```
 
 ## License
 
