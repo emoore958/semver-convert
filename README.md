@@ -65,7 +65,8 @@ line 3: 'not-a-version' is not a valid SemVer 2.0.0 string
 Malformed lines are reported on stderr with their line number and
 skipped; the exit code is non-zero if anything was skipped, but the
 rest of the stream is still converted. Use `-i`/`-o` to read or write a
-file instead of stdin/stdout.
+file instead of stdin/stdout. Pass `--strict` to stop at the first bad
+line instead of skipping it and converting the rest.
 
 ## Streaming
 
@@ -75,8 +76,9 @@ fine - nothing does `.read()` or `.readlines()` on the whole input.
 
 ## Status
 
-Early skeleton. Parsing and both conversion directions work and are
-covered by unit tests in `tests/`; no packaging on PyPI yet.
+Early skeleton. Parsing, both conversion directions, and the CLI
+streaming/`--strict` behavior work and are covered by unit tests in
+`tests/`; no packaging on PyPI yet.
 
 Run the tests with:
 

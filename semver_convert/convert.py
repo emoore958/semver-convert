@@ -37,12 +37,14 @@ def convert_lines(lines: Iterable[str], direction: str) -> Iterable[tuple[int, s
             yield line_number, None, str(exc)
 
 
-def run(infile: TextIO, outfile: TextIO, errfile: TextIO, direction: str) -> int:
+def run(infile: TextIO, outfile: TextIO, errfile: TextIO, direction: str, strict: bool = False) -> int:
     had_errors = False
     for line_number, output, error in convert_lines(infile, direction):
         if error is not None:
             had_errors = True
             print(f"line {line_number}: {error}", file=errfile)
+            if strict:
+                break
             continue
         outfile.write(output)
         outfile.write("\n")
@@ -70,6 +72,11 @@ def build_parser() -> argparse.ArgumentParser:
         default="-",
         help="output file (default: stdout)",
     )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="stop at the first invalid line instead of skipping it and continuing",
+    )
     return parser
 
 
@@ -79,7 +86,7 @@ def main(argv: list[str] | None = None) -> int:
     infile = sys.stdin if args.input == "-" else open(args.input, "r", encoding="utf-8")
     outfile = sys.stdout if args.output == "-" else open(args.output, "w", encoding="utf-8")
     try:
-        return run(infile, outfile, sys.stderr, args.direction)
+        return run(infile, outfile, sys.stderr, args.direction, strict=args.strict)
     finally:
         if infile is not sys.stdin:
             infile.close()
