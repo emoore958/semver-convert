@@ -7,11 +7,16 @@ than materializing the whole file, so this comfortably handles a
 version list far larger than available memory as long as no single line
 is absurd - the same guarantee does not hold for `fh.readlines()` or
 `fh.read()`, which is exactly what this avoids.
+
+`-i`/`-o` paths ending in `.gz` are transparently read/written as gzip
+(`gzip.open(..., "rt"/"wt")` streams the same way a plain text file
+handle does, so the memory guarantee above still holds).
 """
 
 from __future__ import annotations
 
 import argparse
+import gzip
 import sys
 from typing import Iterable, TextIO
 
@@ -52,6 +57,22 @@ def run(infile: TextIO, outfile: TextIO, errfile: TextIO, direction: str, strict
     return 1 if had_errors else 0
 
 
+def _open_input(path: str) -> TextIO:
+    if path == "-":
+        return sys.stdin
+    if path.endswith(".gz"):
+        return gzip.open(path, "rt", encoding="utf-8")
+    return open(path, "r", encoding="utf-8")
+
+
+def _open_output(path: str) -> TextIO:
+    if path == "-":
+        return sys.stdout
+    if path.endswith(".gz"):
+        return gzip.open(path, "wt", encoding="utf-8")
+    return open(path, "w", encoding="utf-8")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="semver-convert",
@@ -65,12 +86,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "-i", "--input",
         default="-",
-        help="input file, one version per line (default: stdin)",
+        help="input file, one version per line (default: stdin); "
+             "a .gz path is read as gzip",
     )
     parser.add_argument(
         "-o", "--output",
         default="-",
-        help="output file (default: stdout)",
+        help="output file (default: stdout); a .gz path is written as gzip",
     )
     parser.add_argument(
         "--strict",
@@ -83,8 +105,8 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
-    infile = sys.stdin if args.input == "-" else open(args.input, "r", encoding="utf-8")
-    outfile = sys.stdout if args.output == "-" else open(args.output, "w", encoding="utf-8")
+    infile = _open_input(args.input)
+    outfile = _open_output(args.output)
     try:
         return run(infile, outfile, sys.stderr, args.direction, strict=args.strict)
     finally:

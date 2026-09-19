@@ -1,7 +1,10 @@
+import gzip
 import io
+import os
+import tempfile
 import unittest
 
-from semver_convert.convert import convert_lines, run
+from semver_convert.convert import _open_input, _open_output, convert_lines, run
 
 
 class ConvertLinesTests(unittest.TestCase):
@@ -79,6 +82,75 @@ class RunTests(unittest.TestCase):
 
         self.assertEqual(status, 0)
         self.assertEqual(outfile.getvalue(), "1.4.2.0\n1.4.3.0\n")
+
+
+class GzipIOTests(unittest.TestCase):
+    def test_gz_output_path_is_written_as_gzip(self):
+        fd, path = tempfile.mkstemp(suffix=".gz")
+        os.close(fd)
+        try:
+            outfile = _open_output(path)
+            try:
+                outfile.write("1.4.2.0\n2.0.0.7\n")
+            finally:
+                outfile.close()
+            with gzip.open(path, "rt", encoding="utf-8") as fh:
+                self.assertEqual(fh.read(), "1.4.2.0\n2.0.0.7\n")
+        finally:
+            os.remove(path)
+
+    def test_gz_input_path_is_read_as_gzip(self):
+        fd, path = tempfile.mkstemp(suffix=".gz")
+        os.close(fd)
+        try:
+            with gzip.open(path, "wt", encoding="utf-8") as fh:
+                fh.write("1.4.2\n2.0.0-rc.1+7\n")
+            infile = _open_input(path)
+            try:
+                self.assertEqual(list(infile), ["1.4.2\n", "2.0.0-rc.1+7\n"])
+            finally:
+                infile.close()
+        finally:
+            os.remove(path)
+
+    def test_run_roundtrips_through_gzip_files(self):
+        in_fd, in_path = tempfile.mkstemp(suffix=".gz")
+        os.close(in_fd)
+        out_fd, out_path = tempfile.mkstemp(suffix=".gz")
+        os.close(out_fd)
+        try:
+            with gzip.open(in_path, "wt", encoding="utf-8") as fh:
+                fh.write("1.4.2\n2.0.0-rc.1+7\n")
+
+            infile = _open_input(in_path)
+            outfile = _open_output(out_path)
+            errfile = io.StringIO()
+            try:
+                status = run(infile, outfile, errfile, "to-win")
+            finally:
+                infile.close()
+                outfile.close()
+
+            self.assertEqual(status, 0)
+            with gzip.open(out_path, "rt", encoding="utf-8") as fh:
+                self.assertEqual(fh.read(), "1.4.2.0\n2.0.0.7\n")
+        finally:
+            os.remove(in_path)
+            os.remove(out_path)
+
+    def test_non_gz_paths_are_opened_as_plain_text(self):
+        fd, path = tempfile.mkstemp(suffix=".txt")
+        os.close(fd)
+        try:
+            outfile = _open_output(path)
+            try:
+                outfile.write("1.4.2.0\n")
+            finally:
+                outfile.close()
+            with open(path, "r", encoding="utf-8") as fh:
+                self.assertEqual(fh.read(), "1.4.2.0\n")
+        finally:
+            os.remove(path)
 
 
 if __name__ == "__main__":
