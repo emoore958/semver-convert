@@ -12,31 +12,48 @@ class ConvertLinesTests(unittest.TestCase):
         results = list(convert_lines(["1.4.2", "2.0.0-rc.1+7"], "to-win"))
         self.assertEqual(
             results,
-            [(1, "1.4.2.0", None), (2, "2.0.0.7", None)],
+            [(1, "1.4.2.0", None, ""), (2, "2.0.0.7", None, "rc.1")],
         )
 
     def test_to_semver(self):
         results = list(convert_lines(["1.4.2.0", "1.4.2.42"], "to-semver"))
         self.assertEqual(
             results,
-            [(1, "1.4.2", None), (2, "1.4.2+42", None)],
+            [(1, "1.4.2", None, None), (2, "1.4.2+42", None, None)],
         )
 
     def test_blank_lines_are_skipped_and_do_not_consume_a_line_number(self):
         results = list(convert_lines(["1.4.2", "", "  \n", "1.4.3"], "to-win"))
         self.assertEqual(
             results,
-            [(1, "1.4.2.0", None), (4, "1.4.3.0", None)],
+            [(1, "1.4.2.0", None, ""), (4, "1.4.3.0", None, "")],
         )
 
     def test_bad_line_reports_error_and_keeps_its_line_number(self):
         results = list(convert_lines(["1.4.2", "not-a-version", "1.4.3"], "to-win"))
-        self.assertEqual(results[0], (1, "1.4.2.0", None))
-        self.assertEqual(results[2], (3, "1.4.3.0", None))
-        line_number, output, error = results[1]
+        self.assertEqual(results[0], (1, "1.4.2.0", None, ""))
+        self.assertEqual(results[2], (3, "1.4.3.0", None, ""))
+        line_number, output, error, tag = results[1]
         self.assertEqual(line_number, 2)
         self.assertIsNone(output)
         self.assertIn("not-a-version", error)
+        self.assertIsNone(tag)
+
+    def test_to_semver_folds_in_supplied_prereleases_in_order(self):
+        results = list(
+            convert_lines(["1.4.2.0", "1.4.2.42"], "to-semver", prereleases=["rc.1", "beta"])
+        )
+        self.assertEqual(
+            results,
+            [(1, "1.4.2-rc.1", None, None), (2, "1.4.2-beta+42", None, None)],
+        )
+
+    def test_to_semver_prerelease_skips_failed_lines(self):
+        results = list(
+            convert_lines(["1.4.2.0", "bad", "1.4.2.42"], "to-semver", prereleases=["rc.1", "beta"])
+        )
+        self.assertEqual(results[0], (1, "1.4.2-rc.1", None, None))
+        self.assertEqual(results[2], (3, "1.4.2-beta+42", None, None))
 
 
 class RunTests(unittest.TestCase):
@@ -82,6 +99,52 @@ class RunTests(unittest.TestCase):
 
         self.assertEqual(status, 0)
         self.assertEqual(outfile.getvalue(), "1.4.2.0\n1.4.3.0\n")
+
+    def test_to_win_with_sidecar_writes_one_prerelease_per_line(self):
+        infile = io.StringIO("1.4.2\n2.0.0-rc.1+7\n")
+        outfile = io.StringIO()
+        errfile = io.StringIO()
+        sidecar = io.StringIO()
+
+        status = run(infile, outfile, errfile, "to-win", sidecar=sidecar)
+
+        self.assertEqual(status, 0)
+        self.assertEqual(outfile.getvalue(), "1.4.2.0\n2.0.0.7\n")
+        self.assertEqual(sidecar.getvalue(), "\nrc.1\n")
+
+    def test_to_semver_with_sidecar_restores_prerelease(self):
+        infile = io.StringIO("1.4.2.0\n2.0.0.7\n")
+        outfile = io.StringIO()
+        errfile = io.StringIO()
+        sidecar = io.StringIO("\nrc.1\n")
+
+        status = run(infile, outfile, errfile, "to-semver", sidecar=sidecar)
+
+        self.assertEqual(status, 0)
+        self.assertEqual(outfile.getvalue(), "1.4.2\n2.0.0-rc.1+7\n")
+
+    def test_sidecar_round_trip_is_lossless_for_prerelease(self):
+        original = ["1.4.2", "2.0.0-rc.1", "3.1.0-beta.2+9"]
+        sidecar_out = io.StringIO()
+        forward = run(
+            io.StringIO("\n".join(original) + "\n"),
+            (win_out := io.StringIO()),
+            io.StringIO(),
+            "to-win",
+            sidecar=sidecar_out,
+        )
+        self.assertEqual(forward, 0)
+
+        sidecar_in = io.StringIO(sidecar_out.getvalue())
+        back = run(
+            io.StringIO(win_out.getvalue()),
+            (semver_out := io.StringIO()),
+            io.StringIO(),
+            "to-semver",
+            sidecar=sidecar_in,
+        )
+        self.assertEqual(back, 0)
+        self.assertEqual(semver_out.getvalue().splitlines(), original)
 
 
 class GzipIOTests(unittest.TestCase):

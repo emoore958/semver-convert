@@ -124,6 +124,14 @@ class WinVerToSemVerTests(unittest.TestCase):
     def test_never_produces_prerelease(self):
         self.assertIsNone(winver_to_semver(parse_winver("1.4.2.42")).prerelease)
 
+    def test_prerelease_argument_is_restored_into_the_result(self):
+        v = winver_to_semver(parse_winver("1.4.2.42"), prerelease="rc.1")
+        self.assertEqual(v, SemVer(1, 4, 2, prerelease="rc.1", build="42"))
+
+    def test_prerelease_argument_defaults_to_none(self):
+        v = winver_to_semver(parse_winver("1.4.2.0"))
+        self.assertIsNone(v.prerelease)
+
 
 if __name__ == "__main__":
     unittest.main()

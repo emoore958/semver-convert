@@ -69,6 +69,30 @@ file instead of stdin/stdout - a path ending in `.gz` is read or
 written as gzip automatically. Pass `--strict` to stop at the first bad
 line instead of skipping it and converting the rest.
 
+## Lossless round trips
+
+`to-win` throws away the prerelease tag because there's nowhere to put
+it in a Windows version. `--sidecar PATH` keeps it around instead: a
+`to-win` run writes one line per converted version to that file (the
+prerelease tag, or blank if there wasn't one), and a later `to-semver`
+run against the same path reads those lines back in order and
+reattaches them.
+
+```
+$ printf '2.3.0-beta.1+42\n1.0.0\n' | python -m semver_convert to-win --sidecar tags.txt
+2.3.0.42
+1.0.0.0
+
+$ printf '2.3.0.42\n1.0.0.0\n' | python -m semver_convert to-semver --sidecar tags.txt
+2.3.0-beta.1+42
+1.0.0
+```
+
+The sidecar only makes sense between two runs over the same version
+list in the same order - it's positional, not keyed by version, so
+reordering or editing either file between the two runs will misalign
+the tags.
+
 ## Streaming
 
 The CLI reads its input one line at a time and writes each converted
@@ -78,8 +102,9 @@ fine - nothing does `.read()` or `.readlines()` on the whole input.
 ## Status
 
 Early skeleton. Parsing, both conversion directions, the CLI
-streaming/`--strict` behavior, and gzip input/output work and are
-covered by unit tests in `tests/`; no packaging on PyPI yet.
+streaming/`--strict` behavior, gzip input/output, and the `--sidecar`
+lossless round trip all work and are covered by unit tests in
+`tests/`; no packaging on PyPI yet.
 
 Run the tests with:
 

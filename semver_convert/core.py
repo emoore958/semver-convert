@@ -127,11 +127,18 @@ def semver_to_winver(version: SemVer) -> WinVersion:
     )
 
 
-def winver_to_semver(version: WinVersion) -> SemVer:
+def winver_to_semver(version: WinVersion, prerelease: str | None = None) -> SemVer:
+    """Convert a WinVersion back to SemVer.
+
+    `prerelease` lets a caller restore the tag that `semver_to_winver` had to
+    drop (there is no field in WinVersion to carry it), typically read back
+    from a sidecar file written during the forward conversion. Left as None,
+    the result never has a prerelease, same as before.
+    """
     return SemVer(
         major=version.major,
         minor=version.minor,
         patch=version.patch,
-        prerelease=None,
+        prerelease=prerelease,
         build=str(version.revision) if version.revision else None,
     )
