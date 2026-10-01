@@ -19,12 +19,16 @@ same sidecar reads them back in order and reattaches them. It only
 covers the prerelease tag, since that's the only piece semver_to_winver
 throws away outright; numeric build metadata already survives as the
 revision field.
+
+`--json` switches the output to newline-delimited JSON, one object per
+input line, so scripts don't have to parse the human-readable form.
 """
 
 from __future__ import annotations
 
 import argparse
 import gzip
+import json
 import sys
 from typing import Iterable, TextIO
 
@@ -78,6 +82,7 @@ def run(
     direction: str,
     strict: bool = False,
     sidecar: TextIO | None = None,
+    json_output: bool = False,
 ) -> int:
     had_errors = False
     prereleases = None
@@ -86,11 +91,21 @@ def run(
     for line_number, output, error, tag in convert_lines(infile, direction, prereleases=prereleases):
         if error is not None:
             had_errors = True
-            print(f"line {line_number}: {error}", file=errfile)
+            if json_output:
+                # Errors go into the same stream so a consumer can match
+                # them to line numbers without also watching stderr.
+                outfile.write(json.dumps({"line": line_number, "error": error}))
+                outfile.write("\n")
+                outfile.flush()
+            else:
+                print(f"line {line_number}: {error}", file=errfile)
             if strict:
                 break
             continue
-        outfile.write(output)
+        if json_output:
+            outfile.write(json.dumps({"line": line_number, "output": output}))
+        else:
+            outfile.write(output)
         outfile.write("\n")
         outfile.flush()
         if sidecar is not None and direction == "to-win":
@@ -143,6 +158,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="stop at the first invalid line instead of skipping it and continuing",
     )
     parser.add_argument(
+        "--json",
+        action="store_true",
+        help="write one JSON object per line ({\"line\", \"output\"} or {\"line\", \"error\"}) "
+             "instead of bare versions; errors then go to the output stream, not stderr",
+    )
+    parser.add_argument(
         "--sidecar",
         help="path to a plain text file that preserves the prerelease tag a to-win "
              "conversion would otherwise drop: written one entry per converted line "
@@ -162,7 +183,8 @@ def main(argv: list[str] | None = None) -> int:
         mode = "w" if args.direction == "to-win" else "r"
         sidecar = open(args.sidecar, mode, encoding="utf-8")
     try:
-        return run(infile, outfile, sys.stderr, args.direction, strict=args.strict, sidecar=sidecar)
+        return run(infile, outfile, sys.stderr, args.direction, strict=args.strict,
+                   sidecar=sidecar, json_output=args.json)
     finally:
         if infile is not sys.stdin:
             infile.close()

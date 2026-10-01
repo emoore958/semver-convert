@@ -69,6 +69,22 @@ file instead of stdin/stdout - a path ending in `.gz` is read or
 written as gzip automatically. Pass `--strict` to stop at the first bad
 line instead of skipping it and converting the rest.
 
+## JSON output
+
+`--json` writes one JSON object per input line instead of bare versions,
+for use from scripts:
+
+```
+$ printf '1.4.2\nbad\n2.0.0-rc.1+7\n' | python -m semver_convert to-win --json
+{"line": 1, "output": "1.4.2.0"}
+{"line": 2, "error": "'bad' is not a valid SemVer 2.0.0 string"}
+{"line": 3, "output": "2.0.0.7"}
+```
+
+Errors are written to the output stream in this mode rather than to
+stderr, so each one stays next to its line number. The exit code and
+`--strict` behave the same as without `--json`.
+
 ## Lossless round trips
 
 `to-win` throws away the prerelease tag because there's nowhere to put
@@ -102,8 +118,8 @@ fine - nothing does `.read()` or `.readlines()` on the whole input.
 ## Status
 
 Early skeleton. Parsing, both conversion directions, the CLI
-streaming/`--strict` behavior, gzip input/output, and the `--sidecar`
-lossless round trip all work and are covered by unit tests in
+streaming/`--strict` behavior, gzip input/output, the `--sidecar`
+lossless round trip, and `--json` output all work and are covered by unit tests in
 `tests/`; no packaging on PyPI yet.
 
 Run the tests with:

@@ -1,5 +1,6 @@
 import gzip
 import io
+import json
 import os
 import tempfile
 import unittest
@@ -145,6 +146,45 @@ class RunTests(unittest.TestCase):
         )
         self.assertEqual(back, 0)
         self.assertEqual(semver_out.getvalue().splitlines(), original)
+
+
+class JsonOutputTests(unittest.TestCase):
+    def test_emits_one_object_per_converted_line(self):
+        outfile = io.StringIO()
+        errfile = io.StringIO()
+
+        status = run(io.StringIO("1.4.2\n\n2.0.0-rc.1+7\n"), outfile, errfile, "to-win", json_output=True)
+
+        self.assertEqual(status, 0)
+        records = [json.loads(line) for line in outfile.getvalue().splitlines()]
+        self.assertEqual(
+            records,
+            [{"line": 1, "output": "1.4.2.0"}, {"line": 3, "output": "2.0.0.7"}],
+        )
+
+    def test_errors_are_written_to_the_output_stream_not_stderr(self):
+        outfile = io.StringIO()
+        errfile = io.StringIO()
+
+        status = run(io.StringIO("1.4.2\nbad\n1.4.3\n"), outfile, errfile, "to-win", json_output=True)
+
+        self.assertEqual(status, 1)
+        self.assertEqual(errfile.getvalue(), "")
+        records = [json.loads(line) for line in outfile.getvalue().splitlines()]
+        self.assertEqual([r["line"] for r in records], [1, 2, 3])
+        self.assertIn("bad", records[1]["error"])
+        self.assertNotIn("output", records[1])
+
+    def test_strict_stops_after_reporting_the_error(self):
+        outfile = io.StringIO()
+
+        status = run(
+            io.StringIO("1.4.2\nbad\n1.4.3\n"), outfile, io.StringIO(), "to-win",
+            strict=True, json_output=True,
+        )
+
+        self.assertEqual(status, 1)
+        self.assertEqual(len(outfile.getvalue().splitlines()), 2)
 
 
 class GzipIOTests(unittest.TestCase):
